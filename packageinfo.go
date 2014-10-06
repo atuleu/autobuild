@@ -5,11 +5,12 @@ import (
 )
 
 type PackageInfo struct {
-	StageFile   string
-	Name        string
-	Version     string
-	Compression string
-	Uid         uint32
+	StageFile     string
+	Name          string
+	Version       string
+	DebianVersion string
+	Compression   string
+	Uid           uint32
 }
 
 func NewPackageInfo(filename string, uid uint32) *PackageInfo {
