@@ -32,3 +32,6 @@ $(TARGET).man: .gen-man
 	./.gen-man > $@
 
 .PHONY: install-man clean-man uninstall-man
+
+check:
+	go test -coverprofile=cover.out -covermode=count
