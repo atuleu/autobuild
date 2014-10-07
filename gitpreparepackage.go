@@ -107,20 +107,48 @@ func (x *CommandGitPreparePackage) readDebianBranches() ([]string, error) {
 	return ret, nil
 }
 
+var origTarballRegexp *regexp.Regexp
+var origVersionRegexp *regexp.Regexp
+var origCompressionRegexp *regexp.Regexp
+
+type OrigInfo struct {
+	Name        string
+	Version     string
+	Compression string
+}
+
+func NewOrigInfoFromPath(pathname string) (*OrigInfo, error) {
+	basename := path.Base(pathname)
+
+	matched := origTarballRegexp.FindStringSubmatch(basename)
+	if matched == nil {
+		return nil, fmt.Errorf("Wrong package filename `%s'", basename)
+	}
+
+	if origVersionRegexp.MatchString(matched[2]) == false {
+		return nil, fmt.Errorf("Wrong package version `%s'", matched[2])
+	}
+
+	if origCompressionRegexp.MatchString(matched[5]) == false {
+		return nil, fmt.Errorf("Wrong package compression `%s'", matched[5])
+	}
+
+	return &OrigInfo{
+		Name:        matched[1],
+		Version:     matched[2],
+		Compression: matched[5],
+	}, nil
+}
+
 func (x *CommandGitPreparePackage) Execute(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("Please provide one tarball of a package (e.g. made with 'make distcheck')")
 	}
 
-	matched := packageInfoRegex.FindStringSubmatch(args[0])
-
-	if matched == nil {
-		return fmt.Errorf("The package `%s' does not appear to be a package...", args[0])
+	oInfo, err := NewOrigInfoFromPath(args[0])
+	if err != nil {
+		return err
 	}
-
-	name := matched[1]
-	version := matched[2]
-	compression := matched[4]
 
 	f, err := os.Open("debian/changelog")
 
@@ -138,14 +166,14 @@ func (x *CommandGitPreparePackage) Execute(args []string) error {
 	f.Close()
 
 	chm, _ := regexp.Compile(`^([^\s]+)\s+\(([0-9]+(\.[0-9]+)+)-[0-9]\)`)
-	matched = chm.FindStringSubmatch(line)
+	matched := chm.FindStringSubmatch(line)
 
 	if matched == nil {
 		return fmt.Errorf("Failed to extract version information from debian changelog")
 	}
 
-	if matched[2] != version {
-		if err := x.updateChangelog(matched[1], version); err != nil {
+	if matched[2] != oInfo.Version {
+		if err := x.updateChangelog(matched[1], oInfo.Version); err != nil {
 			return err
 		}
 	}
@@ -160,7 +188,7 @@ func (x *CommandGitPreparePackage) Execute(args []string) error {
 
 	var tp string
 
-	switch compression {
+	switch oInfo.Compression {
 	case "gz":
 		tp = "z"
 	case "bz2":
@@ -176,11 +204,11 @@ func (x *CommandGitPreparePackage) Execute(args []string) error {
 		return err
 	}
 
-	nm := fmt.Sprintf("%s_%s", name, version)
+	nm := fmt.Sprintf("%s_%s", oInfo.Name, oInfo.Version)
 	orig := fmt.Sprintf("%s.orig.tar.gz", nm)
 	diff := fmt.Sprintf("%s.diff", nm)
 	diffgz := fmt.Sprintf("%s.gz", diff)
-	dname := fmt.Sprintf("%s-%s", name, version)
+	dname := fmt.Sprintf("%s-%s", oInfo.Name, oInfo.Version)
 
 	err = RunCommand("tar", "-C", tmp, "-czf", path.Join(tmp, orig), dname)
 
@@ -301,6 +329,19 @@ func (x *CommandGitPreparePackage) Execute(args []string) error {
 }
 
 func init() {
+	var err error
+	origTarballRegexp, err = regexp.Compile(`\A([a-z][a-z0-9\-]*)[-_]([\.0-9]+(~[a-z0-9]+)?)(\.orig)?\.tar\.([a-z0-9]+)\z`)
+	if err != nil {
+		panic(err)
+	}
+	origVersionRegexp, err = regexp.Compile(`\A[0-9]+(\.[0-9]+)*(~[a-z0-9]+)?\z`)
+	if err != nil {
+		panic(err)
+	}
+	origCompressionRegexp, err = regexp.Compile(`\A(bz2|xy|gz)\z`)
+	if err != nil {
+		panic(err)
+	}
 	parser.AddCommand("git-prepare-package",
 		"Prepare a package using information from a git repository",
 		"The git-prepare-package command creates an archive suitable for use with `autobuild stage' from a git repository. It expects the original tarball source as an argument and uses the `debian' branch of the current git repository to create the debian diff. Additionally, it will generate a new debian changelog entry if necessary.",

@@ -136,7 +136,6 @@ var builder = PackageBuilder{
 	notifyQueue:  make(chan bool, 1024),
 }
 
-var packageInfoRegex *regexp.Regexp
 var changelogSubstituteRegex *regexp.Regexp
 
 func (x *PackageBuilder) Do(fn func(b *PackageBuilder) error) error {
@@ -192,7 +191,10 @@ func (x *PackageBuilder) Stage(pname string,
 
 		f.Close()
 
-		info = NewPackageInfo(stagefile, uid)
+		info, err = NewPackageInfo(stagefile, uid)
+		if err != nil {
+			return err
+		}
 
 		b.PackageQueue = append(b.PackageQueue, info)
 		b.notifyQueue <- true
@@ -1084,7 +1086,6 @@ func (x *PackageBuilder) FindPackage(id uint64) (*BuildInfo, *DistroBuildInfo) {
 }
 
 func init() {
-	packageInfoRegex, _ = regexp.Compile(`(.*)[_-]([0-9]+(\.[0-9]+)+).tar.(gz|xz|bz2)`)
 	changelogSubstituteRegex, _ = regexp.Compile(`-([0-9]+)\) UNRELEASED`)
 
 	gob.Register(Error(""))

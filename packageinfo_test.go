@@ -50,9 +50,11 @@ func (s *PackageInfoSuite) TestPackageInfoFilenameParsing(c *C) {
 		},
 	}
 
-	var i uint32 = 0
 	for filename, expected := range testData {
-		info := NewPackageInfo(filename, i)
+		info, err := NewPackageInfo(filename, expected.Uid)
+		if c.Check(err, IsNil) == false {
+			continue
+		}
 		if c.Check(info, NotNil) == false {
 			continue
 		}
@@ -61,6 +63,26 @@ func (s *PackageInfoSuite) TestPackageInfoFilenameParsing(c *C) {
 		c.Check(info.Version, Equals, expected.Version)
 		c.Check(info.Compression, Equals, expected.Compression)
 		c.Check(info.Uid, Equals, expected.Uid)
-		i = i + 1
+	}
+}
+
+func (s *PackageInfoSuite) TestPackageInfoFireErrors(c *C) {
+	expectedData := map[string]string{
+		"1badName_0.1.2-2.tar.gz":                  "Wrong package filename `1badName'",
+		"good-name42_0.1.2~badVersion2.1-1ubuntu1": "Wrong package version `0.1.2~badVersion2.1-1ubuntu1'",
+	}
+
+	for filename, expectedError := range expectedData {
+		info, err := NewPackageInfo(filename, 0)
+		if c.Check(info, IsNil) {
+			continue
+		}
+
+		if c.Check(err, NotNil) {
+			continue
+		}
+
+		c.Check(err.Error(), Equals, expectedError)
+
 	}
 }
